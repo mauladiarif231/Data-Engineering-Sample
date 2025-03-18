@@ -45,11 +45,3 @@ To stop the project, execute
 ```
 docker compose down --volumes
 ```
-
-## 4. Submitting Your Solution
-
-Below is the steps to submit your solution:
-
-1. Remove unncessary directories such as `jupyter/.ipynb_checkpoints/`, `postgres/db`, and `minio/data`. Your solution should be able to run without the local data that you created in your local development environment.
-2. Zip the project directory.
-3. Submit the zip file to the https://www.sawitpro.com/kirim-tugas.
