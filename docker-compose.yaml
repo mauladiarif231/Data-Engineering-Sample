@@ -1,0 +1,121 @@
+# This is the docker-compose.yaml file for the Data Engineer V2025
+# This will start the below services:
+# 1. Jupyter Notebook
+#    This is the entry point for the assignment.
+#    You will use this to do a simple ETL process and visualization.
+# 2. MinIO
+#    This is the Minio server that will be used to simulate
+#    object storage.
+# 3. PostgreSQL
+#    This is the PostgreSQL server that will be used to simulate
+#    a database.
+
+services:
+  ############################################################
+  # Jupyter Notebook
+  # This is the Jupyter Notebook server that will be used to
+  # run the notebook. This is the entry point for the assignment.
+  # You will use this to do a simple ETL process and visualization.
+  # You can access the Jupyter Notebook server from your browser
+  # using the following URL:
+  # http://localhost:8888
+  # Your notebook file is in the `work` directory.
+  ############################################################
+  jupyter:
+    build:
+      context: .
+      # Below is the Dockerfile for the jupyter notebook.
+      # You may need to modify this file to install the necessary packages.
+      dockerfile: jupyter.Dockerfile
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./jupyter:/home/jovyan/work
+    environment:
+      JUPYTER_ENABLE_LAB: "yes"
+    command: start-notebook.sh --NotebookApp.token=''
+
+  ############################################################
+  # Minio
+  # This is the Minio server that will be used to simulate
+  # object storage.
+  # You can access the Minio server from Jupyter Notebook using
+  # the following configuration:
+  # - endpoint_url: http://minio:9000
+  # - aws_access_key_id: minio_access_key
+  # - aws_secret_access_key: minio_secret_key
+  # The object storage service will have 2 buckets `users` and
+  # `trackers`.
+  ############################################################
+  minio:
+    image: minio/minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - ./minio/data:/data
+    environment:
+      MINIO_ACCESS_KEY: minio_access_key
+      MINIO_SECRET_KEY: minio_secret_key
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # This is a simple script to initialize the minio bucket and
+  # dump the data from the csv file to the minio bucket.
+  minio_init:
+    image: minio/mc
+    depends_on:
+      minio:
+        condition: service_healthy
+    volumes:
+      - ./minio/init:/data
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set minio http://minio:9000 minio_access_key minio_secret_key &&
+      mc mb minio/trackers &&
+      mc mb minio/users &&
+      mc anonymous set public minio/trackers &&
+      mc anonymous set public minio/users &&
+      mc cp --recursive /data/trackers/* minio/trackers/ &&
+      mc cp --recursive /data/users/* minio/users/
+      "
+
+  ############################################################
+  # PostgreSQL
+  # This is the PostgreSQL server that will be used to simulate
+  # a database.
+  # You can access the PostgreSQL server from Jupyter Notebook using
+  # the following configuration:
+  # - host: postgres
+  # - port: 5432
+  # - user: postgres
+  # - password: postgres
+  ############################################################
+  postgres:
+    platform: linux/x86_64
+    image: postgres:14.1-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: database
+    ports:
+      - 5432:5432
+    expose:
+      - 5432
+    volumes:
+      - ./postgres/db:/var/lib/postgresql/data
+      # Load database schema from ./database.sql
+      # If you want to reload new database schema, you need to execute
+      # `docker-compose down --volumes` first to remove the volume.
+      - ./postgres/database.sql:/docker-entrypoint-initdb.d/database.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
